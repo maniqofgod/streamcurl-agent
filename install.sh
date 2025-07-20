@@ -98,6 +98,8 @@ After=network.target
 User=$CURRENT_USER
 Group=$(id -gn "$CURRENT_USER")
 WorkingDirectory=$AGENT_DIR
+# Muat variabel lingkungan dari file .env
+EnvironmentFile=$AGENT_DIR/.env
 ExecStart=$(which python3) -m uvicorn main:app --host 0.0.0.0 --port $AGENT_PORT
 Restart=always
 RestartSec=3
