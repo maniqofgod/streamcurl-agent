@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import subprocess
 import os
@@ -17,6 +18,15 @@ PID_DIR.mkdir(exist_ok=True)
 
 app = FastAPI()
 
+# Tambahkan CORS Middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Mengizinkan semua origin. Batasi ini di produksi jika memungkinkan.
+    allow_credentials=True,
+    allow_methods=["*"],  # Mengizinkan semua metode (GET, POST, dll.)
+    allow_headers=["*"],  # Mengizinkan semua header
+)
+
 # Kamus untuk menyimpan proses yang sedang berjalan
 # Key: stream_id, Value: subprocess.Popen object
 stream_processes = {}
@@ -30,10 +40,24 @@ class StreamStopRequest(BaseModel):
 
 # Dependensi untuk memeriksa API Key
 async def verify_api_key(request: Request):
-    provided_key = request.headers.get("X-API-Key")
-    if not provided_key or provided_key != API_KEY:
-        logger.warning(f"Upaya akses tidak sah dari IP: {request.client.host}")
-        raise HTTPException(status_code=403, detail="Akses ditolak: API Key tidak valid atau tidak ada.")
+    auth_header = request.headers.get("Authorization")
+    logger.info(f"Menerima permintaan dari {request.client.host} dengan header: {request.headers}")
+    
+    if not auth_header or not auth_header.startswith("Bearer "):
+        logger.warning(f"Upaya akses tidak sah dari IP: {request.client.host}. Header 'Authorization' hilang atau formatnya salah.")
+        raise HTTPException(status_code=403, detail="Akses ditolak: Header 'Authorization' tidak valid.")
+        
+    provided_key = auth_header.split(" ")[1]
+    
+    if provided_key != API_KEY:
+        # Log a masked version of the key for security
+        masked_key = f"{provided_key[:4]}...{provided_key[-4:]}" if len(provided_key) > 8 else provided_key
+        logger.warning(
+            f"Upaya akses tidak sah dari IP: {request.client.host}. "
+            f"Kunci yang diberikan ({masked_key}) tidak cocok dengan kunci yang diharapkan."
+        )
+        raise HTTPException(status_code=403, detail="Akses ditolak: API Key tidak valid.")
+        
     return True
 
 def get_pid_file(stream_id: int) -> Path:
