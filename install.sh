@@ -4,7 +4,7 @@
 # Cukup jalankan skrip ini di VPS Linux baru (disarankan Ubuntu 20.04+).
 
 # --- Konfigurasi ---
-REPO_URL="https://github.com/maniqofgod/streamcurl.git"
+REPO_URL="https://github.com/maniqofgod/streamcurl-agent.git"
 # --------------------
 
 # Warna untuk output
@@ -44,22 +44,20 @@ else
 fi
 
 # 2. Klona atau Perbarui Repositori Aplikasi
-# Ekstrak nama repo dari URL untuk nama direktori yang konsisten
 REPO_NAME=$(basename -s .git "$REPO_URL")
-CLONE_DIR="/home/$(whoami)/$REPO_NAME"
-AGENT_DIR="$CLONE_DIR/vps-agent"
+AGENT_DIR="/home/$(whoami)/$REPO_NAME"
 
 log_info "Mengklona atau memperbarui repositori dari $REPO_URL..."
-if [ -d "$CLONE_DIR/.git" ]; then
+if [ -d "$AGENT_DIR/.git" ]; then
     log_info "Direktori repositori sudah ada. Menjalankan 'git pull'..."
-    cd "$CLONE_DIR"
+    cd "$AGENT_DIR"
     if ! git pull; then
         log_error "Gagal menjalankan 'git pull'. Harap periksa repositori Anda untuk konflik atau masalah lainnya."
         exit 1
     fi
 else
-    log_info "Mengklona repositori baru ke $CLONE_DIR..."
-    if ! git clone "$REPO_URL" "$CLONE_DIR"; then
+    log_info "Mengklona repositori baru ke $AGENT_DIR..."
+    if ! git clone "$REPO_URL" "$AGENT_DIR"; then
         log_error "Gagal mengklona repositori. Periksa URL dan pastikan repositori bersifat publik."
         exit 1
     fi
@@ -67,7 +65,7 @@ fi
 
 # Pindah ke direktori agen
 log_info "Masuk ke direktori agen di $AGENT_DIR"
-cd "$AGENT_DIR" || { log_error "Gagal masuk ke direktori agen di $AGENT_DIR. Apakah struktur repositori Anda benar (harus ada folder 'vps-agent' di root)?"; exit 1; }
+cd "$AGENT_DIR" || { log_error "Gagal masuk ke direktori agen di $AGENT_DIR."; exit 1; }
 
 # 3. Instal Dependensi Python
 log_info "Menginstal dependensi Python dari requirements.txt..."
