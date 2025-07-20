@@ -117,6 +117,13 @@ log_info "Mengkonfigurasi firewall untuk mengizinkan port $AGENT_PORT..."
 sudo ufw allow $AGENT_PORT/tcp > /dev/null 2>&1
 sudo ufw reload > /dev/null 2>&1
 
+# 7. Deteksi Sumber Daya Sistem
+log_info "Mendeteksi sumber daya sistem..."
+CPU_CORES=$(nproc)
+# Dapatkan total RAM dalam MB dan bulatkan ke GB terdekat
+TOTAL_RAM_MB=$(free -m | awk '/^Mem:/{print $2}')
+TOTAL_RAM_GB=$(( (TOTAL_RAM_MB + 512) / 1024 )) # Pembulatan ke atas
+
 # Selesai
 log_info "Penyiapan Selesai!"
 echo -e "--------------------------------------------------"
@@ -124,5 +131,8 @@ echo -e "${YELLOW}Harap simpan informasi berikut di tempat yang aman dan masukka
 echo -e "  ${GREEN}Alamat IP VPS: $(hostname -I | awk '{print $1}')${NC}"
 echo -e "  ${GREEN}Port Agen: $AGENT_PORT${NC}"
 echo -e "  ${GREEN}Kunci API Anda: $USER_API_KEY${NC}"
+echo -e "  ${YELLOW}--- Spesifikasi VPS Terdeteksi ---${NC}"
+echo -e "  ${GREEN}Total Core CPU: $CPU_CORES${NC}"
+echo -e "  ${GREEN}Total RAM: $TOTAL_RAM_GB GB${NC}"
 echo -e "--------------------------------------------------"
 echo -e "Anda dapat memeriksa status layanan dengan menjalankan: ${YELLOW}sudo systemctl status vps-agent${NC}"
