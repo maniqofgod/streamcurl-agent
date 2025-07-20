@@ -6,6 +6,8 @@ import os
 import logging
 import signal
 from pathlib import Path
+import requests
+import threading
 
 # Konfigurasi logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -34,6 +36,8 @@ stream_processes = {}
 class StreamStartRequest(BaseModel):
     ffmpeg_command: list
     stream_id: int
+    callback_url: str | None = None
+    callback_api_key: str | None = None
 
 class StreamStopRequest(BaseModel):
     stream_id: int
@@ -75,6 +79,25 @@ def is_process_running(pid: int) -> bool:
     else:
         return True
 
+def send_callback(url: str, api_key: str, stream_id: int, status: str, details: str):
+    """Mengirim pembaruan status kembali ke backend dalam thread terpisah."""
+    try:
+        headers = {"X-Agent-Token": api_key}
+        payload = {"stream_id": stream_id, "status": status, "details": details}
+        requests.post(url, json=payload, headers=headers, timeout=15)
+        logger.info(f"Callback terkirim ke {url} untuk stream {stream_id} dengan status {status}")
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Gagal mengirim callback ke {url} untuk stream {stream_id}: {e}")
+
+def log_ffmpeg_output(process: subprocess.Popen, stream_id: int):
+    """Membaca dan mencatat output dari proses FFmpeg."""
+    for line in iter(process.stdout.readline, ''):
+        logger.info(f"FFMPEG (stream {stream_id}): {line.strip()}")
+    process.stdout.close()
+    return_code = process.wait()
+    if return_code:
+        logger.error(f"Proses FFmpeg untuk stream {stream_id} berhenti dengan kode error: {return_code}")
+
 @app.post("/stream/start", dependencies=[Depends(verify_api_key)])
 async def start_stream(request: StreamStartRequest):
     stream_id = request.stream_id
@@ -87,7 +110,6 @@ async def start_stream(request: StreamStartRequest):
                 logger.warning(f"Stream {stream_id} sudah berjalan dengan PID {pid}.")
                 raise HTTPException(status_code=409, detail=f"Stream {stream_id} sudah berjalan.")
         except (ValueError, FileNotFoundError):
-            # File PID rusak atau hilang, lanjutkan
             pass
 
     command = request.ffmpeg_command
@@ -99,14 +121,31 @@ async def start_stream(request: StreamStartRequest):
             text=True, bufsize=1, universal_newlines=True
         )
         
-        # Simpan proses dan PID-nya
         stream_processes[stream_id] = process
         pid_file.write_text(str(process.pid))
         
+        # Mulai thread untuk mencatat output FFmpeg
+        log_thread = threading.Thread(target=log_ffmpeg_output, args=(process, stream_id))
+        log_thread.start()
+        
         logger.info(f"Proses FFmpeg untuk stream {stream_id} dimulai dengan PID: {process.pid}")
+
+        if request.callback_url and request.callback_api_key:
+            threading.Thread(
+                target=send_callback,
+                args=(request.callback_url, request.callback_api_key, stream_id, "LIVE", f"Stream started on VPS with PID {process.pid}")
+            ).start()
+
         return {"message": "Proses streaming berhasil dimulai.", "pid": process.pid, "stream_id": stream_id}
     except Exception as e:
         logger.error(f"Gagal memulai proses FFmpeg untuk stream {stream_id}: {e}")
+        
+        if request.callback_url and request.callback_api_key:
+             threading.Thread(
+                target=send_callback,
+                args=(request.callback_url, request.callback_api_key, stream_id, "Error", str(e))
+            ).start()
+
         raise HTTPException(status_code=500, detail=f"Gagal memulai FFmpeg: {str(e)}")
 
 @app.post("/stream/stop", dependencies=[Depends(verify_api_key)])
